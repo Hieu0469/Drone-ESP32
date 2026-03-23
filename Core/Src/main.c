@@ -23,6 +23,9 @@
 /* USER CODE BEGIN Includes */
 #include "MPU.h"
 #include <stdio.h>
+#include "PID.h"
+#include <string.h>
+#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -53,9 +56,15 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 /* USER CODE BEGIN PV */
 uint8_t rx_data;           // Biến chứa 1 ký tự nhận được từ Bluetooth
 uint8_t is_armed = 0;      // 0 = Khóa động cơ (1000us), 1 = Mở động cơ (Cho phép quay)
-uint32_t last_bt_time = 0; // Lưu thời gian nhận tín hiệu cuối cùng (chống mất sóng)
+uint32_t last_bt_time = 0;
+//Biến xử lý chuỗi từ web
+char rx_buffer[20];
+uint8_t rx_index = 0;
+//Biến PID cho trục Roll
+PID_Param_t PID_Roll;
 // Thêm biến này để chứa dữ liệu MPU6050
 MPU6050_Raw mpu_data;
+extern float angle_roll;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -111,48 +120,25 @@ int main(void)
   MX_USB_OTG_FS_PCD_Init();
   /* USER CODE BEGIN 2 */
   // 1. Kích hoạt bộ phát PWM trên cả 4 kênh của TIM2
-
     HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
     HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
     HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
     HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_4);
 
     HAL_UART_Receive_IT(&huart1, &rx_data, 1);
-
+    MPU6050_Init();
+    PID_Init(&PID_Roll, 0.0, 0.0, 0.0, 0.005, 0.0, -200.0, 200.0, 1);
+    HAL_TIM_Base_Start_IT(&htim1);
     // 2. Kích hoạt cảm biến MPU6050 (SAFE FROM CUBEMX HERE!)
-      MPU6050_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  // 1. Read the raw data from the sensor into your container
-	        MPU6050_Read_Data(&mpu_data);
-
-	        // 2. Process that raw data into usable angles (Roll/Pitch)
-	        MPU6050_Process_Angle(&mpu_data);
-
-	        // 3. Print the RAW integer data to the IDE console
-	        printf("Raw X: %d | Raw Y: %d | Raw Z: %d\r\n", mpu_data.Accel_X_RAW, mpu_data.Accel_Y_RAW, mpu_data.Accel_Z_RAW);
-	      // --- LOGIC ĐIỀU KHIỂN ĐỘNG CƠ ---
-	  if(is_armed == 1)
-	  {
-	          // Sau này chỗ này bạn sẽ bỏ hàm PID vào đây
-	      __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1130);
-	      __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 1130);
-	      __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1130);
-	      __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, 1130);
-	   }
-	   else
-	   {
-	          // TRẠNG THÁI KHÓA (DISARM): Ép tất cả về 1000us (Tắt motor)
-	       __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1000);
-	       __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 1000);
-	       __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1000);
-	       __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, 1000);
-	   }
-	   HAL_Delay(10);
+	//In dữ liệu ra màn hình
+	printf("Goc Roll: %.2f | Kp: %.2f | Ki: %.2f | Kd: %.2f\r\n", angle_roll, PID_Roll.Kp, PID_Roll.Ki, PID_Roll.Kd);
+	HAL_Delay(10);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -442,25 +428,81 @@ int _write(int file, char *ptr, int len) {
     }
     return len;
 }
-// Hàm này tự động chạy mỗi khi điện thoại gửi 1 ký tự qua Bluetooth
+// --- 1. NGẮT NHẬN DỮ LIỆU TỪ WEB BLUETOOTH ---
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   if(huart->Instance == USART1)
   {
-    last_bt_time = HAL_GetTick(); // Cập nhật thời điểm có sóng
+    last_bt_time = HAL_GetTick();
 
-    if(rx_data == 'A') // Nhận chữ A (Arm)
+    if (rx_data == '\n' || rx_data == '\r')
     {
-      is_armed = 1;
-    }
-    else if(rx_data == 'D') // Nhận chữ D (Disarm)
-    {
-      is_armed = 0;
-    }
+        rx_buffer[rx_index] = '\0'; // Chốt chuỗi
 
-    // Cài đặt lại ngắt để chực chờ nhận ký tự tiếp theo
+        if (rx_buffer[0] == 'A') is_armed = 1;
+        else if (rx_buffer[0] == 'D') is_armed = 0;
+
+        // Giải mã lệnh PID trục Roll (Ví dụ: "1P1.5")
+        else if (rx_buffer[0] == '1') {
+            float val = atof(&rx_buffer[2]);
+            if (rx_buffer[1] == 'P') PID_Roll.Kp = val;
+            else if (rx_buffer[1] == 'I') PID_Roll.Ki = val;
+            else if (rx_buffer[1] == 'D') PID_Roll.Kd = val;
+        }
+        rx_index = 0;
+    }
+    else
+    {
+        if (rx_index < 19) rx_buffer[rx_index++] = rx_data;
+    }
     HAL_UART_Receive_IT(&huart1, &rx_data, 1);
   }
+}
+
+// --- 2. NGẮT TIMER 1 (CHẠY CHÍNH XÁC MỖI 5ms) ---
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if(htim->Instance == TIM1)
+    {
+    	MPU6050_Read_Data(&mpu_data);
+        MPU6050_Process_Angle(&mpu_data);
+        // 2. Logic cân bằng
+        if(is_armed == 1)
+        {
+            // Tính toán lượng ga cần bù dựa trên góc nghiêng hiện tại
+            float roll_output = PID_Calculate(&PID_Roll, angle_roll);
+
+            // Mức ga nền (Đủ để cánh quạt quay có lực cản tay bạn)
+            int throttle = 1300;
+
+            // BỘ TRỘN MIXER: Trục ROLL
+            // Quy ước: Motor Trái là FL, BL. Motor Phải là FR, BR.
+            int motor_FL = throttle - roll_output;
+            int motor_BL = throttle - roll_output;
+            int motor_FR = throttle + roll_output;
+            int motor_BR = throttle + roll_output;
+
+            // Chặn giới hạn xung tuyệt đối bảo vệ ESC
+            if(motor_FL > 1800) motor_FL = 1800; if(motor_FL < 1000) motor_FL = 1000;
+            if(motor_FR > 1800) motor_FR = 1800; if(motor_FR < 1000) motor_FR = 1000;
+            if(motor_BL > 1800) motor_BL = 1800; if(motor_BL < 1000) motor_BL = 1000;
+            if(motor_BR > 1800) motor_BR = 1800; if(motor_BR < 1000) motor_BR = 1000;
+
+            // Xuất tín hiệu ra 4 ESC
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, motor_FL);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, motor_FR);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, motor_BR);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, motor_BL);
+        }
+        else
+        {
+            // Disarm: Tắt hoàn toàn động cơ
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1000);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 1000);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1000);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, 1000);
+        }
+    }
 }
 /* USER CODE END 4 */
 

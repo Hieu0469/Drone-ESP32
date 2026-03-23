@@ -28,25 +28,28 @@ void PID_SetSetPoint(PID_Param_t *pid,float Setpoint){
 float PID_Calculate(PID_Param_t *pid, float Input) {
     float Error = pid->Setpoint - Input;
     float Proportional = pid->Kp * Error;
-    pid->IntegralSum +=  Error  * pid->Ts;
-    if (pid->AntiWindup) { // Basic anti-windup
+
+    // Khâu Tích phân (I) và chống bão hòa
+    pid->IntegralSum += Error * pid->Ts;
+    if (pid->AntiWindup) {
         if (pid->IntegralSum > pid->OutMax) pid->IntegralSum = pid->OutMax;
         else if (pid->IntegralSum < pid->OutMin) pid->IntegralSum = pid->OutMin;
     }
     float Integral = pid->Ki * pid->IntegralSum;
-    float Derivative;
 
-    Derivative = pid->Kd * (Error - pid->PreviousError) / pid->Ts;
-    pid->PreviousError = Error;
+    // SỬA LỖI 1: Đạo hàm trên giá trị đo (Chống hiện tượng Derivative Kick)
+    // Tận dụng biến PreviousError để lưu Input của vòng lặp trước
+    float Derivative = -pid->Kd * (Input - pid->PreviousError) / pid->Ts;
+    pid->PreviousError = Input; // Lưu giá trị đo hiện tại cho lần tính sau
 
+    // Tổng hợp tín hiệu
     float Output = Proportional + Integral + Derivative;
 
-    // Output clamping
-//    if(pid->AntiWindup){
-//        if (Output > pid->OutMax) Output = pid->OutMax;
-//        else if (Output < pid->OutMin) Output = pid->OutMin;
-//    }
-
+    // SỬA LỖI 2: Mở khóa (Uncomment) khâu chặn ngõ ra an toàn
+    if (pid->AntiWindup) {
+        if (Output > pid->OutMax) Output = pid->OutMax;
+        else if (Output < pid->OutMin) Output = pid->OutMin;
+    }
 
     return Output;
 }
