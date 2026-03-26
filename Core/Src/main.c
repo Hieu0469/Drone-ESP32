@@ -64,6 +64,7 @@ uint8_t rx_index = 0;
 PID_Param_t PID_Roll;
 // Thêm biến này để chứa dữ liệu MPU6050
 MPU6050_Raw mpu_data;
+extern float angle_pitch;
 extern float angle_roll;
 /* USER CODE END PV */
 
@@ -127,7 +128,7 @@ int main(void)
 
     HAL_UART_Receive_IT(&huart1, &rx_data, 1);
     MPU6050_Init();
-    PID_Init(&PID_Roll, 0.0, 0.0, 0.0, 0.005, 0.0, -200.0, 200.0, 1);
+    PID_Init(&PID_Roll, 0.0, 0.0, 0.0, 0.05, -3.0, -200.0, 200.0, 1);
     HAL_TIM_Base_Start_IT(&htim1);
     // 2. Kích hoạt cảm biến MPU6050 (SAFE FROM CUBEMX HERE!)
   /* USER CODE END 2 */
@@ -137,7 +138,6 @@ int main(void)
   while (1)
   {
 	//In dữ liệu ra màn hình
-	printf("Goc Roll: %.2f | Kp: %.2f | Ki: %.2f | Kd: %.2f\r\n", angle_roll, PID_Roll.Kp, PID_Roll.Ki, PID_Roll.Kd);
 	HAL_Delay(10);
     /* USER CODE END WHILE */
 
@@ -246,7 +246,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 167;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 4999;
+  htim1.Init.Period = 1999;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -471,7 +471,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         {
             // Tính toán lượng ga cần bù dựa trên góc nghiêng hiện tại
             float roll_output = PID_Calculate(&PID_Roll, angle_roll);
-
             // Mức ga nền (Đủ để cánh quạt quay có lực cản tay bạn)
             int throttle = 1300;
 
@@ -483,10 +482,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             int motor_BR = throttle + roll_output;
 
             // Chặn giới hạn xung tuyệt đối bảo vệ ESC
-            if(motor_FL > 1800) motor_FL = 1800; if(motor_FL < 1000) motor_FL = 1000;
-            if(motor_FR > 1800) motor_FR = 1800; if(motor_FR < 1000) motor_FR = 1000;
-            if(motor_BL > 1800) motor_BL = 1800; if(motor_BL < 1000) motor_BL = 1000;
-            if(motor_BR > 1800) motor_BR = 1800; if(motor_BR < 1000) motor_BR = 1000;
+            if(motor_FL > 1800) motor_FL = 1800;
+            if(motor_FL < 1100) motor_FL = 1100;
+            if(motor_FR > 1800) motor_FR = 1800;
+            if(motor_FR < 1100) motor_FR = 1100;
+            if(motor_BL > 1800) motor_BL = 1800;
+            if(motor_BL < 1100) motor_BL = 1100;
+            if(motor_BR > 1800) motor_BR = 1800;
+            if(motor_BR < 1100) motor_BR = 1100;
 
             // Xuất tín hiệu ra 4 ESC
             __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, motor_FL);
