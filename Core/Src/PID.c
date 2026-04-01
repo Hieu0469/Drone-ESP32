@@ -46,10 +46,10 @@ float PID_Calculate(PID_Param_t *pid, float Input) {
     float Output = Proportional + Integral + Derivative;
 
     // SỬA LỖI 2: Mở khóa (Uncomment) khâu chặn ngõ ra an toàn
-    if (pid->AntiWindup) {
-        if (Output > pid->OutMax) Output = pid->OutMax;
-        else if (Output < pid->OutMin) Output = pid->OutMin;
-    }
+//    if (pid->AntiWindup) {
+//        if (Output > pid->OutMax) Output = pid->OutMax;
+//        else if (Output < pid->OutMin) Output = pid->OutMin;
+//    }
 
     return Output;
 }

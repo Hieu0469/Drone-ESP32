@@ -62,6 +62,8 @@ char rx_buffer[20];
 uint8_t rx_index = 0;
 //Biến PID cho trục Roll
 PID_Param_t PID_Roll;
+PID_Param_t PID_Pitch;
+PID_Param_t PID_Yaw;
 // Thêm biến này để chứa dữ liệu MPU6050
 MPU6050_Raw mpu_data;
 extern float angle_pitch;
@@ -128,7 +130,7 @@ int main(void)
 
     HAL_UART_Receive_IT(&huart1, &rx_data, 1);
     MPU6050_Init();
-    PID_Init(&PID_Roll, 0.0, 0.0, 0.0, 0.05, -3.0, -200.0, 200.0, 1);
+    PID_Init(&PID_Roll, 0.0, 0.0, 0.0, 0.05, 0.0, -100.0, 100.0, 1);
     HAL_TIM_Base_Start_IT(&htim1);
     // 2. Kích hoạt cảm biến MPU6050 (SAFE FROM CUBEMX HERE!)
   /* USER CODE END 2 */
@@ -431,30 +433,48 @@ int _write(int file, char *ptr, int len) {
 // --- 1. NGẮT NHẬN DỮ LIỆU TỪ WEB BLUETOOTH ---
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-  if(huart->Instance == USART1)
+  if(huart->Instance == USART1) // Đổi USART1 nếu bạn dùng cổng khác
   {
-    last_bt_time = HAL_GetTick();
-
+    // Ký tự \n (Enter) là dấu hiệu kết thúc 1 lệnh từ App điện thoại
     if (rx_data == '\n' || rx_data == '\r')
     {
-        rx_buffer[rx_index] = '\0'; // Chốt chuỗi
+        rx_buffer[rx_index] = '\0'; // Chốt mảng ký tự thành chuỗi hoàn chỉnh
 
-        if (rx_buffer[0] == 'A') is_armed = 1;
-        else if (rx_buffer[0] == 'D') is_armed = 0;
+        if (rx_index > 0) // Đảm bảo có dữ liệu
+        {
+            // 1. XỬ LÝ LỆNH TẮT/BẬT MOTOR
+            if (rx_buffer[0] == 'A') is_armed = 1;
+            else if (rx_buffer[0] == 'D') is_armed = 0;
 
-        // Giải mã lệnh PID trục Roll (Ví dụ: "1P1.5")
-        else if (rx_buffer[0] == '1') {
-            float val = atof(&rx_buffer[2]);
-            if (rx_buffer[1] == 'P') PID_Roll.Kp = val;
-            else if (rx_buffer[1] == 'I') PID_Roll.Ki = val;
-            else if (rx_buffer[1] == 'D') PID_Roll.Kd = val;
+            // 2. XỬ LÝ LỆNH NẠP PID (Ký tự đầu là 1, 2, hoặc 3)
+            else if (rx_buffer[0] == '1' || rx_buffer[0] == '2' || rx_buffer[0] == '3')
+            {
+                float val = atof(&rx_buffer[2]); // Cắt lấy con số từ vị trí thứ 3 trở đi
+
+                PID_Param_t *current_pid = NULL; // Con trỏ trỏ tới bộ PID cần sửa
+
+                // Chọn bộ PID tương ứng
+                if (rx_buffer[0] == '1') current_pid = &PID_Roll;
+                else if (rx_buffer[0] == '2') current_pid = &PID_Pitch;
+                else if (rx_buffer[0] == '3') current_pid = &PID_Yaw;
+
+                // Nạp giá trị vào P, I, hoặc D
+                if (current_pid != NULL) {
+                    if (rx_buffer[1] == 'P') current_pid->Kp = val;
+                    else if (rx_buffer[1] == 'I') current_pid->Ki = val;
+                    else if (rx_buffer[1] == 'D') current_pid->Kd = val;
+                }
+            }
         }
-        rx_index = 0;
+        rx_index = 0; // Xóa bộ đệm, sẵn sàng đón lệnh tiếp theo
     }
     else
     {
+        // Nếu chưa gặp Enter, tiếp tục nhét ký tự vào bộ đệm (chống tràn 19 ký tự)
         if (rx_index < 19) rx_buffer[rx_index++] = rx_data;
     }
+
+    // Bắt buộc: Gọi lại hàm này để STM32 mở cửa đón byte tiếp theo
     HAL_UART_Receive_IT(&huart1, &rx_data, 1);
   }
 }
