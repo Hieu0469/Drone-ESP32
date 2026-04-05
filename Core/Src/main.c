@@ -68,6 +68,8 @@ PID_Param_t PID_Yaw;
 MPU6050_Raw mpu_data;
 extern float angle_pitch;
 extern float angle_roll;
+
+int throttle = 1000;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -130,7 +132,7 @@ int main(void)
 
     HAL_UART_Receive_IT(&huart1, &rx_data, 1);
     MPU6050_Init();
-    PID_Init(&PID_Roll, 0.0, 0.0, 0.0, 0.05, 0.0, -100.0, 100.0, 1);
+    PID_Init(&PID_Roll, 0.0, 0.0, 0.0, 0.02, 0.0, -100.0, 100.0, 1);
     HAL_TIM_Base_Start_IT(&htim1);
     // 2. Kích hoạt cảm biến MPU6050 (SAFE FROM CUBEMX HERE!)
   /* USER CODE END 2 */
@@ -248,7 +250,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 167;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 1999;
+  htim1.Init.Period = 4999;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -465,6 +467,16 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
                     else if (rx_buffer[1] == 'D') current_pid->Kd = val;
                 }
             }
+            // --- 3. XỬ LÝ LỆNH GA (THROTTLE) ---
+                else if (rx_buffer[0] == 'T')
+                {
+                            // Lấy phần số nguyên sau chữ T
+                	throttle = atoi(&rx_buffer[1]);
+
+                            // An toàn: Chặn mức ga nền không cho vượt quá giới hạn
+                    if (throttle > 1600) throttle = 1600;
+                    if (throttle < 1000) throttle = 1000;
+                }
         }
         rx_index = 0; // Xóa bộ đệm, sẵn sàng đón lệnh tiếp theo
     }
@@ -492,9 +504,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             // Tính toán lượng ga cần bù dựa trên góc nghiêng hiện tại
             float roll_output = PID_Calculate(&PID_Roll, angle_roll);
             // Mức ga nền (Đủ để cánh quạt quay có lực cản tay bạn)
-            int throttle = 1300;
-
-            // BỘ TRỘN MIXER: Trục ROLL
             // Quy ước: Motor Trái là FL, BL. Motor Phải là FR, BR.
             int motor_FL = throttle - roll_output;
             int motor_BL = throttle - roll_output;
