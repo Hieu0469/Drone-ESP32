@@ -24,6 +24,7 @@
 #include "MPU.h"
 #include <stdio.h>
 #include "PID.h"
+#include "remote_input.h"
 #include <string.h>
 #include <stdlib.h>
 /* USER CODE END Includes */
@@ -55,7 +56,6 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 
 /* USER CODE BEGIN PV */
 uint8_t rx_data;           // Biến chứa 1 ký tự nhận được từ Bluetooth
-uint8_t is_armed = 0;      // 0 = Khóa động cơ (1000us), 1 = Mở động cơ (Cho phép quay)
 uint32_t last_bt_time = 0;
 //Biến xử lý chuỗi từ web
 char rx_buffer[20];
@@ -68,8 +68,7 @@ PID_Param_t PID_Yaw;
 MPU6050_Raw mpu_data;
 extern float angle_pitch;
 extern float angle_roll;
-
-int throttle = 1000;
+RemoteCommand_t remote_cmd;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -130,9 +129,12 @@ int main(void)
     HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
     HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_4);
 
+    RemoteInput_Init();
     HAL_UART_Receive_IT(&huart1, &rx_data, 1);
     MPU6050_Init();
     PID_Init(&PID_Roll, 0.0, 0.0, 0.0, 0.02, 0.0, -100.0, 100.0, 1);
+    PID_Init(&PID_Pitch, 0.0, 0.0, 0.0, 0.02, 0.0, -100.0, 100.0, 1);
+    PID_Init(&PID_Yaw, 0.0, 0.0, 0.0, 0.02, 0.0, -100.0, 100.0, 1);
     HAL_TIM_Base_Start_IT(&htim1);
     // 2. Kích hoạt cảm biến MPU6050 (SAFE FROM CUBEMX HERE!)
   /* USER CODE END 2 */
@@ -437,19 +439,16 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   if(huart->Instance == USART1) // Đổi USART1 nếu bạn dùng cổng khác
   {
+    RemoteInput_ParseByte(rx_data);
     // Ký tự \n (Enter) là dấu hiệu kết thúc 1 lệnh từ App điện thoại
-    if (rx_data == '\n' || rx_data == '\r')
+    if (rx_data == '\n' || rx_data == '\r' || rx_data == ';')
     {
         rx_buffer[rx_index] = '\0'; // Chốt mảng ký tự thành chuỗi hoàn chỉnh
 
         if (rx_index > 0) // Đảm bảo có dữ liệu
         {
-            // 1. XỬ LÝ LỆNH TẮT/BẬT MOTOR
-            if (rx_buffer[0] == 'A') is_armed = 1;
-            else if (rx_buffer[0] == 'D') is_armed = 0;
-
             // 2. XỬ LÝ LỆNH NẠP PID (Ký tự đầu là 1, 2, hoặc 3)
-            else if (rx_buffer[0] == '1' || rx_buffer[0] == '2' || rx_buffer[0] == '3')
+            if (rx_buffer[0] == '1' || rx_buffer[0] == '2' || rx_buffer[0] == '3')
             {
                 float val = atof(&rx_buffer[2]); // Cắt lấy con số từ vị trí thứ 3 trở đi
 
@@ -467,16 +466,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
                     else if (rx_buffer[1] == 'D') current_pid->Kd = val;
                 }
             }
-            // --- 3. XỬ LÝ LỆNH GA (THROTTLE) ---
-                else if (rx_buffer[0] == 'T')
-                {
-                            // Lấy phần số nguyên sau chữ T
-                	throttle = atoi(&rx_buffer[1]);
-
-                            // An toàn: Chặn mức ga nền không cho vượt quá giới hạn
-                    if (throttle > 1600) throttle = 1600;
-                    if (throttle < 1000) throttle = 1000;
-                }
         }
         rx_index = 0; // Xóa bộ đệm, sẵn sàng đón lệnh tiếp theo
     }
@@ -496,19 +485,48 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if(htim->Instance == TIM1)
     {
+        remote_cmd = RemoteInput_Get();
     	MPU6050_Read_Data(&mpu_data);
         MPU6050_Process_Angle(&mpu_data);
-        // 2. Logic cân bằng
-        if(is_armed == 1)
+
+        uint32_t cmd_age = HAL_GetTick() - remote_cmd.last_update_ms;
+
+        if (cmd_age > 200)
         {
+            remote_cmd.roll_cmd = 0;
+            remote_cmd.pitch_cmd = 0;
+            remote_cmd.yaw_cmd = 0;
+        }
+
+        if (cmd_age > 1200)
+        {
+            remote_cmd.armed = 0;
+            remote_cmd.throttle = 1000;
+            remote_cmd.roll_cmd = 0;
+            remote_cmd.pitch_cmd = 0;
+            remote_cmd.yaw_cmd = 0;
+        }
+
+        // 2. Logic cân bằng
+        if(remote_cmd.armed == 1)
+        {
+            PID_Roll.Setpoint = (float)remote_cmd.roll_cmd;
+            PID_Pitch.Setpoint = (float)remote_cmd.pitch_cmd;
+
             // Tính toán lượng ga cần bù dựa trên góc nghiêng hiện tại
             float roll_output = PID_Calculate(&PID_Roll, angle_roll);
-            // Mức ga nền (Đủ để cánh quạt quay có lực cản tay bạn)
+            float pitch_output = PID_Calculate(&PID_Pitch, angle_pitch);
+            float yaw_output = (float)remote_cmd.yaw_cmd;
+
+            // Mức ga nền
+            int throttle = remote_cmd.throttle;
+
+            // BỘ TRỘN MIXER: ROLL + PITCH + YAW
             // Quy ước: Motor Trái là FL, BL. Motor Phải là FR, BR.
-            int motor_FL = throttle - roll_output;
-            int motor_BL = throttle - roll_output;
-            int motor_FR = throttle + roll_output;
-            int motor_BR = throttle + roll_output;
+            int motor_FL = throttle - (int)roll_output - (int)pitch_output + (int)yaw_output;
+            int motor_BL = throttle - (int)roll_output + (int)pitch_output - (int)yaw_output;
+            int motor_FR = throttle + (int)roll_output - (int)pitch_output - (int)yaw_output;
+            int motor_BR = throttle + (int)roll_output + (int)pitch_output + (int)yaw_output;
 
             // Chặn giới hạn xung tuyệt đối bảo vệ ESC
             if(motor_FL > 1800) motor_FL = 1800;
@@ -552,7 +570,9 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-#ifdef USE_FULL_ASSERT
+
+#ifdef  USE_FULL_ASSERT
+
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.

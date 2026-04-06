@@ -160,7 +160,11 @@ SH.S_TIM2_CH3.ConfNb=1
 SH.S_TIM2_CH4.0=TIM2_CH4,PWM Generation4 CH4
 SH.S_TIM2_CH4.ConfNb=1
 TIM1.IPParameters=Prescaler,Period
+<<<<<<< HEAD
 TIM1.Period=4999
+=======
+TIM1.Period=1999
+>>>>>>> 1afa4d579ae4796debe49eb915d73c25e3f8f8c3
 TIM1.Prescaler=167
 TIM2.Channel-PWM\ Generation1\ CH1=TIM_CHANNEL_1
 TIM2.Channel-PWM\ Generation2\ CH2=TIM_CHANNEL_2
