@@ -1,0 +1,302 @@
+#include "bt_controller.h"
+
+BTController::BTController(FlightController& fc)
+  : fc(fc),
+    activeKey(ActiveKey::NONE),
+    connected(false),
+    lastReceiveTime(0),
+    lastRampTime(0),
+    lastTelemetryTime(0)
+{
+  rc = {0.0f, 0.0f, 0.0f, 0.0f};
+}
+
+// =============================================
+// BEGIN
+// =============================================
+void BTController::begin() {
+  if (!bt.begin(BT_DEVICE_NAME)) {
+    Serial.println("[BT] Khởi động thất bại!");
+    return;
+  }
+  Serial.printf("[BT] Tên: %s — Đang chờ kết nối...\n",
+                BT_DEVICE_NAME);
+}
+
+// =============================================
+// UPDATE — gọi liên tục trong loop()
+// =============================================
+void BTController::update() {
+  bool nowConnected = bt.connected();
+
+  // --- Xử lý kết nối / ngắt ---
+  if (nowConnected && !connected) {
+    connected       = true;
+    lastReceiveTime = millis();
+    Serial.println("[BT] Đã kết nối!");
+    bt.println("CONNECTED:ESP32_Drone");
+    sendStatus();
+  }
+
+  if (!nowConnected && connected) {
+    connected = false;
+    activeKey = ActiveKey::NONE;
+    rc        = {0, 0, 0, 0};
+    Serial.println("[BT] Mất kết nối! Reset RC.");
+  }
+
+  if (!connected) return;
+
+  // --- Đọc từng byte từ app ---
+  while (bt.available()) {
+    char c = (char)bt.read();
+    lastReceiveTime = millis();
+
+    // Ký tự đơn → xử lý ngay
+    if (c == '\n' || c == '\r') {
+      if (rxBuffer.length() > 0) {
+        parsePIDCommand(rxBuffer);
+        rxBuffer = "";
+      }
+      continue;
+    }
+
+    // Ký tự lệnh đơn (in hoa)
+    // Nếu chỉ 1 ký tự và không phải số/dấu chấm
+    // → joystick command
+    if (rxBuffer.length() == 0 && isAlpha(c) && isUpperCase(c)) {
+      handleChar(c);
+    } else {
+      // Tích lũy thành chuỗi PID command
+      rxBuffer += c;
+      if (rxBuffer.length() > 64) rxBuffer = "";
+    }
+  }
+
+  // --- Timeout mất data ---
+//   if (millis() - lastReceiveTime > BT_TIMEOUT_MS) {
+//     if (rc.throttle > 0) {
+//       rc        = {0, 0, 0, 0};
+//       activeKey = ActiveKey::NONE;
+//       Serial.println("[BT] Timeout! Reset RC.");
+//     }
+//   }
+
+  // --- Ramping mỗi 20ms ---
+  if (millis() - lastRampTime >= JOYSTICK_UPDATE_MS) {
+    lastRampTime = millis();
+    applyRamp();
+  }
+}
+
+// =============================================
+// HANDLE CHAR — xử lý ký tự đơn từ joystick
+// =============================================
+void BTController::handleChar(char c) {
+  Serial.printf("[BT] Key: '%c'\n", c);
+
+  switch (c) {
+
+    // --- THROTTLE ---
+    case 'U':  activeKey = ActiveKey::THR_UP;    break;
+    case 'D':  activeKey = ActiveKey::THR_DOWN;  break;
+
+    // --- ROLL ---
+    case 'L':  activeKey = ActiveKey::ROLL_LEFT;  break;
+    case 'R':  activeKey = ActiveKey::ROLL_RIGHT; break;
+
+    // --- PITCH ---
+    case 'F':  activeKey = ActiveKey::PITCH_FWD;  break;
+    case 'B':  activeKey = ActiveKey::PITCH_BACK; break;
+
+    // --- YAW ---
+    case 'Q':  activeKey = ActiveKey::YAW_LEFT;  break;
+    case 'E':  activeKey = ActiveKey::YAW_RIGHT; break;
+
+    // --- HOLD: thả nút → giữ nguyên giá trị ---
+    case 'H':
+      activeKey = ActiveKey::NONE;
+      // Roll, Pitch, Yaw về 0 khi thả
+      // Throttle giữ nguyên
+      rc.roll  = 0.0f;
+      rc.pitch = 0.0f;
+      rc.yaw   = 0.0f;
+      Serial.printf("[BT] HOLD — Thr:%.1f%%\n", rc.throttle);
+      break;
+
+    // --- EMERGENCY STOP ---
+    case 'X':
+      activeKey   = ActiveKey::NONE;
+      rc          = {0, 0, 0, 0};
+      fc.disarm();
+      Serial.println("[BT] !!! EMERGENCY STOP !!!");
+      bt.println("STOP:OK");
+      break;
+
+    // --- ARM ---
+    case 'A':
+      fc.begin();
+      Serial.println("[BT] Armed!");
+      bt.println("ARM:OK");
+      break;
+
+    // --- DISARM ---
+    case 'S':
+      activeKey = ActiveKey::NONE;
+      rc        = {0, 0, 0, 0};
+      fc.disarm();
+      bt.println("DISARM:OK");
+      break;
+
+    // --- STATUS ---
+    case 'P':
+      sendStatus();
+      sendPIDStatus();
+      break;
+
+    default:
+      Serial.printf("[BT] Unknown key: '%c'\n", c);
+      break;
+  }
+}
+
+// =============================================
+// APPLY RAMP — tăng/giảm dần mỗi 20ms
+// =============================================
+void BTController::applyRamp() {
+  switch (activeKey) {
+
+    case ActiveKey::THR_UP:
+      rc.throttle = clamp(rc.throttle + THR_STEP,
+                          THR_MIN, THR_MAX);
+      break;
+
+    case ActiveKey::THR_DOWN:
+      rc.throttle = clamp(rc.throttle - THR_STEP,
+                          THR_MIN, THR_MAX);
+      break;
+
+    case ActiveKey::ROLL_LEFT:
+      rc.roll = clamp(rc.roll - ANGLE_STEP,
+                      -ANGLE_MAX, ANGLE_MAX);
+      break;
+
+    case ActiveKey::ROLL_RIGHT:
+      rc.roll = clamp(rc.roll + ANGLE_STEP,
+                      -ANGLE_MAX, ANGLE_MAX);
+      break;
+
+    case ActiveKey::PITCH_FWD:
+      rc.pitch = clamp(rc.pitch - ANGLE_STEP,
+                       -ANGLE_MAX, ANGLE_MAX);
+      break;
+
+    case ActiveKey::PITCH_BACK:
+      rc.pitch = clamp(rc.pitch + ANGLE_STEP,
+                       -ANGLE_MAX, ANGLE_MAX);
+      break;
+
+    case ActiveKey::YAW_LEFT:
+      rc.yaw = clamp(rc.yaw - YAW_STEP,
+                     -YAW_MAX, YAW_MAX);
+      break;
+
+    case ActiveKey::YAW_RIGHT:
+      rc.yaw = clamp(rc.yaw + YAW_STEP,
+                     -YAW_MAX, YAW_MAX);
+      break;
+
+    case ActiveKey::NONE:
+    default:
+      break;
+  }
+}
+
+// =============================================
+// PARSE PID COMMAND (chuỗi nhiều ký tự)
+// rp:1.5 | ri:0.05 | rd:0.8
+// pp:1.5 | pi:0.05 | pd:0.8
+// yp:3.0 | yi:0.02 | yd:0.0
+// pid    | arm     | stop
+// =============================================
+void BTController::parsePIDCommand(const String& cmd) {
+  Serial.printf("[BT CMD] '%s'\n", cmd.c_str());
+
+  if (cmd == "pid") {
+    sendPIDStatus();
+
+  } else if (cmd == "stop" || cmd == "x") {
+    handleChar('X');
+
+  } else if (cmd == "arm") {
+    handleChar('A');
+
+  } else if (cmd == "disarm") {
+    handleChar('S');
+
+  } else if (cmd.length() >= 4 && cmd.charAt(2) == ':') {
+    // PID tuning: "rp:1.5"
+    fc.tunePID(cmd);
+    bt.println("PID:UPDATED");
+    sendPIDStatus();
+
+  } else {
+    bt.println("ERR:UNKNOWN_CMD");
+  }
+}
+
+// =============================================
+// GỬI TELEMETRY về app mỗi 100ms
+// =============================================
+void BTController::sendTelemetry(const SensorData& s,
+                                   const MotorOutput& m) {
+  if (!connected) return;
+  if (millis() - lastTelemetryTime < 100) return;
+  lastTelemetryTime = millis();
+
+  char buf[180];
+  snprintf(buf, sizeof(buf),
+    "T:%.2f,%.2f,%.2f|M:%.1f,%.1f,%.1f,%.1f|R:%.1f,%.1f,%.1f,%.1f",
+    s.pitch, s.roll, s.gz,
+    m.fl, m.fr, m.bl, m.br,
+    rc.throttle, rc.roll, rc.pitch, rc.yaw
+  );
+  bt.println(buf);
+}
+
+// =============================================
+// STATUS & PID
+// =============================================
+void BTController::sendStatus() {
+  char buf[100];
+  snprintf(buf, sizeof(buf),
+    "STATUS:armed=%d,thr=%.1f,roll=%.1f,pitch=%.1f,yaw=%.1f",
+    fc.isArmed(),
+    rc.throttle, rc.roll, rc.pitch, rc.yaw
+  );
+  bt.println(buf);
+}
+
+void BTController::sendPIDStatus() {
+  char buf[220];
+  snprintf(buf, sizeof(buf),
+    "PID:"
+    "rp=%.3f,ri=%.3f,rd=%.3f|"
+    "pp=%.3f,pi=%.3f,pd=%.3f|"
+    "yp=%.3f,yi=%.3f,yd=%.3f",
+    fc.getRollPID().getKp(),
+    fc.getRollPID().getKi(),
+    fc.getRollPID().getKd(),
+    fc.getPitchPID().getKp(),
+    fc.getPitchPID().getKi(),
+    fc.getPitchPID().getKd(),
+    fc.getYawPID().getKp(),
+    fc.getYawPID().getKi(),
+    fc.getYawPID().getKd()
+  );
+  bt.println(buf);
+}
+
+float BTController::clamp(float val, float mn, float mx) {
+  return val < mn ? mn : (val > mx ? mx : val);
+}
