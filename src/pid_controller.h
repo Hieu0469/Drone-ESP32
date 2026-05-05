@@ -19,12 +19,12 @@
 #define PID_YAW_KD      0.0f
 
 // Giới hạn output PID
-#define PID_ROLL_LIMIT   300.0f
-#define PID_PITCH_LIMIT  300.0f
+#define PID_ROLL_LIMIT   10.0f
+#define PID_PITCH_LIMIT  10.0f
 #define PID_YAW_LIMIT    200.0f
 
 // Giới hạn integral (anti-windup)
-#define PID_INTEGRAL_LIMIT  100.0f
+#define PID_INTEGRAL_LIMIT  1.0f
 
 struct PIDConfig {
   float kp, ki, kd;
@@ -39,7 +39,7 @@ class PIDController {
 public:
   PIDController(float kp, float ki, float kd,
                 float outputLimit    = 300.0f,
-                float integralLimit  = 100.0f);
+                float integralLimit  = 5.0f);
 
   // Cập nhật PID, trả về output
   // setpoint: giá trị mong muốn

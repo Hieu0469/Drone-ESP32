@@ -26,7 +26,7 @@ struct ComplementaryFilter {
   float angle;
   float dt;
 
-  ComplementaryFilter(float alpha = 0.98f, float dt = 0.001f)
+  ComplementaryFilter(float alpha = 0.96f, float dt = 0.001f)
     : alpha(alpha), angle(0.0f), dt(dt) {}
 
   void reset() { angle = 0.0f; }

@@ -13,9 +13,9 @@
 #define YAW_STEP          2.0f    // deg/s mỗi 20ms
 
 #define THR_MIN           0.0f
-#define THR_MAX           100.0f
+#define THR_MAX           30.0f
 #define ANGLE_MAX         30.0f
-#define YAW_MAX           180.0f
+#define YAW_MAX           18.0f
 
 #define JOYSTICK_UPDATE_MS  20   // xử lý ramping mỗi 20ms
 

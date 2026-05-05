@@ -127,12 +127,12 @@ private:
     float accelRoll  = atan2f(-data.ax, data.az) * 180.0f / PI;
 
     // Complementary
-    data.pitch = compPitch.update(data.gx, accelPitch);
-    data.roll  = compRoll.update(data.gy, accelRoll);
+    // data.pitch = compPitch.update(data.gx, accelPitch);
+    // data.roll  = compRoll.update(data.gy, accelRoll);
 
     // Kalman (bỏ comment nếu muốn dùng thay Complementary)
-    // data.pitch = kalmanPitch.update(data.gx, accelPitch, DT);
-    // data.roll  = kalmanRoll.update(data.gy, accelRoll, DT);
+    data.pitch = kalmanPitch.update(data.gx, accelPitch, DT);
+    data.roll  = kalmanRoll.update(data.gy, accelRoll, DT);
   }
 
   // ------------------------------------------

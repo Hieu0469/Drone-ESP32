@@ -86,6 +86,6 @@ void loop() {
     esc.setAllThrottle(m.fl, m.fr, m.bl, m.br);
 
     // 5. Gửi telemetry về app
-    // bt.sendTelemetry(s, m);
+    bt.sendTelemetry(s, m);
   }
 }

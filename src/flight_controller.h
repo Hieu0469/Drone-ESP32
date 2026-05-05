@@ -14,9 +14,9 @@
 #define MAX_ANGLE_PITCH    30.0f
 
 // Throttle tối thiểu để PID hoạt động
-#define MIN_THROTTLE_ARM   10.0f
+#define MIN_THROTTLE_ARM   20.0f
 // Throttle tối đa cho phép
-#define MAX_THROTTLE       85.0f
+#define MAX_THROTTLE       90.0f
 
 // =============================================
 // INPUT TỪ REMOTE CONTROL

@@ -71,10 +71,11 @@ void FlightController::mixMotors(float throttle,
                                   float rollOut,
                                   float pitchOut,
                                   float yawOut) {
-  float fl = throttle + rollOut - pitchOut + yawOut;
-  float fr = throttle - rollOut - pitchOut - yawOut;
-  float bl = throttle + rollOut + pitchOut - yawOut;
-  float br = throttle - rollOut + pitchOut + yawOut;
+  float fl=0, fr=0, bl=0, br=0;
+  // fl = throttle + rollOut - pitchOut + yawOut;
+  fr = throttle - rollOut - pitchOut - yawOut;
+  bl = throttle + rollOut + pitchOut - yawOut;
+  // br = throttle - rollOut + pitchOut + yawOut;
 
   // Clamp 0 ~ MAX_THROTTLE
   motorOut.fl = clamp(fl, 0.0f, MAX_THROTTLE);
