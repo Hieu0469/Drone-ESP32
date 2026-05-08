@@ -6,13 +6,13 @@
 // =============================================
 
 // PID Góc (Angle mode)
-#define PID_ROLL_KP     0.0f
-#define PID_ROLL_KI     0.0f
-#define PID_ROLL_KD     0.0f
+#define PID_ROLL_KP     0.4f
+#define PID_ROLL_KI     0.1f
+#define PID_ROLL_KD     0.01f
 
-#define PID_PITCH_KP    0.0f
-#define PID_PITCH_KI    0.0f
-#define PID_PITCH_KD    0.0f
+#define PID_PITCH_KP    0.4f
+#define PID_PITCH_KI    0.1f
+#define PID_PITCH_KD    0.01f
 
 #define PID_YAW_KP      0.0f
 #define PID_YAW_KI      0.0f
@@ -24,7 +24,7 @@
 #define PID_YAW_LIMIT    200.0f
 
 // Giới hạn integral (anti-windup)
-#define PID_INTEGRAL_LIMIT  1.0f
+#define PID_INTEGRAL_LIMIT  2.0f
 
 struct PIDConfig {
   float kp, ki, kd;

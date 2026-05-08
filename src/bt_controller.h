@@ -10,10 +10,12 @@
 // update() gọi mỗi 20ms (xem JOYSTICK_UPDATE_MS)
 #define THR_STEP          0.5f    // %   mỗi 20ms
 #define ANGLE_STEP        0.3f    // độ  mỗi 20ms
-#define YAW_STEP          2.0f    // deg/s mỗi 20ms
+#define YAW_STEP          3.0f    // deg/s mỗi 20ms
 
 #define THR_MIN           0.0f
-#define THR_MAX           30.0f
+#define THR_MAX_DEFAULT       55.0f
+#define INTEGRAL_LIMIT_DEFAULT 2.0f
+
 #define ANGLE_MAX         30.0f
 #define YAW_MAX           18.0f
 
@@ -43,6 +45,8 @@ public:
   void sendTelemetry(const SensorData& s,
                      const MotorOutput& m);
 
+  float getThrMax()        const { return thrMax; }        // ← THÊM
+  float getIntegralLimit() const { return integralLimit; } // ← THÊM
 private:
   BluetoothSerial bt;
   FlightController& fc;
@@ -56,6 +60,9 @@ private:
   uint32_t  lastTelemetryTime;
 
   String    rxBuffer;
+
+  float thrMax;           // ← THÊM
+  float integralLimit;    // ← THÊM
 
   // Xử lý ký tự nhận được
   void handleChar(char c);
@@ -71,4 +78,7 @@ private:
   void parsePIDCommand(const String& cmd);
 
   float clamp(float val, float mn, float mx);
+
+  void parseConfigCommand(const String& cmd);  // ← THÊM
+
 };

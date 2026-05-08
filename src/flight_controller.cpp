@@ -72,16 +72,16 @@ void FlightController::mixMotors(float throttle,
                                   float pitchOut,
                                   float yawOut) {
   float fl=0, fr=0, bl=0, br=0;
-  // fl = throttle + rollOut - pitchOut + yawOut;
-  fr = throttle - rollOut - pitchOut - yawOut;
-  bl = throttle + rollOut + pitchOut - yawOut;
-  // br = throttle - rollOut + pitchOut + yawOut;
+  fl = throttle + rollOut - pitchOut + yawOut;  // thêm 5% để cân bằng quạt yếu hơn
+  fr = throttle - rollOut - pitchOut - yawOut ;
+  bl = throttle + rollOut + pitchOut - yawOut + 5;
+  br = throttle - rollOut + pitchOut + yawOut;
 
   // Clamp 0 ~ MAX_THROTTLE
-  motorOut.fl = clamp(fl, 0.0f, MAX_THROTTLE);
-  motorOut.fr = clamp(fr, 0.0f, MAX_THROTTLE);
-  motorOut.bl = clamp(bl, 0.0f, MAX_THROTTLE);
-  motorOut.br = clamp(br, 0.0f, MAX_THROTTLE);
+  motorOut.fl = clamp(fl, 0.0f, maxThrottle);
+  motorOut.fr = clamp(fr, 0.0f, maxThrottle);
+  motorOut.bl = clamp(bl, 0.0f, maxThrottle);
+  motorOut.br = clamp(br, 0.0f, maxThrottle);
 }
 
 // =============================================

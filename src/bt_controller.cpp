@@ -6,9 +6,11 @@ BTController::BTController(FlightController& fc)
     connected(false),
     lastReceiveTime(0),
     lastRampTime(0),
-    lastTelemetryTime(0)
+    lastTelemetryTime(0),
+    thrMax(THR_MAX_DEFAULT),           // ← THÊM
+    integralLimit(INTEGRAL_LIMIT_DEFAULT) // ← THÊM
 {
-  rc = {0.0f, 0.0f, 0.0f, 0.0f};
+  rc = {0.0f, 1.0f, 1.0f, 0.0f};
 }
 
 // =============================================
@@ -41,7 +43,7 @@ void BTController::update() {
   if (!nowConnected && connected) {
     connected = false;
     activeKey = ActiveKey::NONE;
-    rc        = {0, 0, 0, 0};
+    rc        = {0, 1, 1, 0};
     Serial.println("[BT] Mất kết nối! Reset RC.");
   }
 
@@ -127,7 +129,7 @@ void BTController::handleChar(char c) {
     // --- EMERGENCY STOP ---
     case 'X':
       activeKey   = ActiveKey::NONE;
-      rc          = {0, 0, 0, 0};
+      rc          = {0, 1, 1, 0};
       fc.disarm();
       Serial.println("[BT] !!! EMERGENCY STOP !!!");
       bt.println("STOP:OK");
@@ -143,7 +145,7 @@ void BTController::handleChar(char c) {
     // --- DISARM ---
     case 'S':
       activeKey = ActiveKey::NONE;
-      rc        = {0, 0, 0, 0};
+      rc        = {0, 1, 1, 0};
       fc.disarm();
       bt.println("DISARM:OK");
       break;
@@ -168,12 +170,12 @@ void BTController::applyRamp() {
 
     case ActiveKey::THR_UP:
       rc.throttle = clamp(rc.throttle + THR_STEP,
-                          THR_MIN, THR_MAX);
+                          THR_MIN, thrMax);
       break;
 
     case ActiveKey::THR_DOWN:
       rc.throttle = clamp(rc.throttle - THR_STEP,
-                          THR_MIN, THR_MAX);
+                          THR_MIN, thrMax);
       break;
 
     case ActiveKey::ROLL_LEFT:
@@ -234,7 +236,11 @@ void BTController::parsePIDCommand(const String& cmd) {
   } else if (cmd == "disarm") {
     handleChar('S');
 
-  } else if (cmd.length() >= 4 && cmd.charAt(2) == ':') {
+  } 
+  else if (cmd.startsWith("cfg:")) {
+    parseConfigCommand(cmd.substring(4));
+  }
+  else if (cmd.length() >= 4 && cmd.charAt(2) == ':') {
     // PID tuning: "rp:1.5"
     fc.tunePID(cmd);
     bt.println("PID:UPDATED");
@@ -244,7 +250,78 @@ void BTController::parsePIDCommand(const String& cmd) {
     bt.println("ERR:UNKNOWN_CMD");
   }
 }
+// =============================================
+// PARSE CONFIG COMMAND
+// Cú pháp: "cfg:tmax:55.0"   → đặt THR_MAX
+//           "cfg:ilim:2.0"   → đặt PID_INTEGRAL_LIMIT
+//           "cfg:?"          → xem giá trị hiện tại
+// =============================================
+void BTController::parseConfigCommand(const String& cmd) {
+  Serial.printf("[BT CFG] '%s'\n", cmd.c_str());
 
+  // Xem giá trị hiện tại
+  if (cmd == "?") {
+    char buf[80];
+    snprintf(buf, sizeof(buf),
+      "CFG:tmax=%.1f,ilim=%.3f",
+      thrMax, integralLimit
+    );
+    bt.println(buf);
+    Serial.println(buf);
+    return;
+  }
+
+  // Tách key:value
+  int sep = cmd.indexOf(':');
+  if (sep < 0) {
+    bt.println("ERR:CFG_FORMAT");  // phải có dấu ':'
+    return;
+  }
+
+  String key = cmd.substring(0, sep);
+  float  val = cmd.substring(sep + 1).toFloat();
+
+  if (key == "tmax") {
+    // Giới hạn an toàn: 20% ~ 90%
+    if (val < 20.0f || val > 90.0f) {
+      bt.println("ERR:TMAX_RANGE(20-90)");
+      return;
+    }
+    thrMax = val;
+
+    // Áp dụng ngay vào RC
+    // Nếu throttle hiện tại > thrMax mới → kéo xuống
+    if (rc.throttle > thrMax) {
+      rc.throttle = thrMax;
+    }
+
+    char buf[40];
+    snprintf(buf, sizeof(buf), "CFG:tmax=%.1f OK", thrMax);
+    bt.println(buf);
+    Serial.println(buf);
+
+  } else if (key == "ilim") {
+    // Giới hạn an toàn: 0.1 ~ 50.0
+    if (val < 0.1f || val > 50.0f) {
+      bt.println("ERR:ILIM_RANGE(0.1-50)");
+      return;
+    }
+    integralLimit = val;
+
+    // Áp dụng ngay vào 3 PID controller
+    fc.getRollPID().setIntegralLimit(integralLimit);
+    fc.getPitchPID().setIntegralLimit(integralLimit);
+    fc.getYawPID().setIntegralLimit(integralLimit);
+
+    char buf[40];
+    snprintf(buf, sizeof(buf), "CFG:ilim=%.3f OK", integralLimit);
+    bt.println(buf);
+    Serial.println(buf);
+
+  } else {
+    bt.println("ERR:CFG_KEY_UNKNOWN");
+  }
+}
 // =============================================
 // GỬI TELEMETRY về app mỗi 100ms
 // =============================================
@@ -268,11 +345,12 @@ void BTController::sendTelemetry(const SensorData& s,
 // STATUS & PID
 // =============================================
 void BTController::sendStatus() {
-  char buf[100];
+  char buf[120];
   snprintf(buf, sizeof(buf),
-    "STATUS:armed=%d,thr=%.1f,roll=%.1f,pitch=%.1f,yaw=%.1f",
+    "STATUS:armed=%d,thr=%.1f,roll=%.1f,pitch=%.1f,yaw=%.1f,tmax=%.1f,ilim=%.3f",
     fc.isArmed(),
-    rc.throttle, rc.roll, rc.pitch, rc.yaw
+    rc.throttle, rc.roll, rc.pitch, rc.yaw,
+    thrMax, integralLimit   // ← THÊM
   );
   bt.println(buf);
 }

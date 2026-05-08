@@ -45,6 +45,8 @@ public:
   void begin();
   void update(const RCInput& rc, const SensorData& sensor);
 
+
+
   // Emergency stop
   void disarm();
 
@@ -64,6 +66,11 @@ public:
   PIDController& getPitchPID() { return pidPitch; }
   PIDController& getYawPID()   { return pidYaw;   }
 
+  void setMaxThrottle(float maxThr) {
+      maxThrottle = clamp(maxThr, 20.0f, 90.0f);
+  }
+  float getMaxThrottle() const { return maxThrottle; }  // ← THÊM
+
 private:
   // 3 PID controllers
   PIDController pidRoll;
@@ -80,4 +87,6 @@ private:
                  float yawOut);
 
   float clamp(float val, float mn, float mx);
+
+  float maxThrottle = MAX_THROTTLE;  // ← THÊM (biến runtime)
 };
