@@ -6,21 +6,21 @@
 // =============================================
 
 // PID Góc (Angle mode)
-#define PID_ROLL_KP     0.4f
-#define PID_ROLL_KI     0.1f
-#define PID_ROLL_KD     0.01f
+#define PID_ROLL_KP     0.8f
+#define PID_ROLL_KI     0.01f
+#define PID_ROLL_KD     0.04f
 
-#define PID_PITCH_KP    0.4f
-#define PID_PITCH_KI    0.1f
-#define PID_PITCH_KD    0.01f
+#define PID_PITCH_KP    0.8f
+#define PID_PITCH_KI    0.01f
+#define PID_PITCH_KD    0.04f
 
-#define PID_YAW_KP      0.0f
+#define PID_YAW_KP      0.5f
 #define PID_YAW_KI      0.0f
 #define PID_YAW_KD      0.0f
 
 // Giới hạn output PID
-#define PID_ROLL_LIMIT   10.0f
-#define PID_PITCH_LIMIT  10.0f
+#define PID_ROLL_LIMIT   40.0f
+#define PID_PITCH_LIMIT  40.0f
 #define PID_YAW_LIMIT    200.0f
 
 // Giới hạn integral (anti-windup)

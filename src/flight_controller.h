@@ -14,10 +14,12 @@
 #define MAX_ANGLE_PITCH    30.0f
 
 // Throttle tối thiểu để PID hoạt động
-#define MIN_THROTTLE_ARM   20.0f
+#define MIN_THROTTLE_ARM   30.0f
 // Throttle tối đa cho phép
 #define MAX_THROTTLE       90.0f
 
+#define TRIM_MIN  -60.0f   // bù tối đa -20%
+#define TRIM_MAX   60.0f   // bù tối đa +20%
 // =============================================
 // INPUT TỪ REMOTE CONTROL
 // =============================================
@@ -71,8 +73,15 @@ public:
   }
   float getMaxThrottle() const { return maxThrottle; }  // ← THÊM
 
+  void  setMotorTrim(int motorIdx, float trim);
+  float getMotorTrim(int motorIdx) const;
+  void  printTrimStatus();
+  void saveTrim();
+  void loadTrim();
 private:
   // 3 PID controllers
+  float motorTrim[4] = {0, 0, 0, 0};  // FL FR BL BR
+
   PIDController pidRoll;
   PIDController pidPitch;
   PIDController pidYaw;

@@ -8,13 +8,13 @@
 
 // Tốc độ tăng/giảm mỗi lần gọi update()
 // update() gọi mỗi 20ms (xem JOYSTICK_UPDATE_MS)
-#define THR_STEP          0.5f    // %   mỗi 20ms
+#define THR_STEP          0.4f    // %   mỗi 20ms
 #define ANGLE_STEP        0.3f    // độ  mỗi 20ms
 #define YAW_STEP          3.0f    // deg/s mỗi 20ms
 
 #define THR_MIN           0.0f
-#define THR_MAX_DEFAULT       55.0f
-#define INTEGRAL_LIMIT_DEFAULT 2.0f
+#define THR_MAX_DEFAULT       52.0f
+#define INTEGRAL_LIMIT_DEFAULT 5.0f
 
 #define ANGLE_MAX         30.0f
 #define YAW_MAX           18.0f
@@ -80,5 +80,8 @@ private:
   float clamp(float val, float mn, float mx);
 
   void parseConfigCommand(const String& cmd);  // ← THÊM
+
+  void parseTrimCommand(const String& cmd);
+  void sendTrimStatus();
 
 };

@@ -10,7 +10,7 @@ BTController::BTController(FlightController& fc)
     thrMax(THR_MAX_DEFAULT),           // ← THÊM
     integralLimit(INTEGRAL_LIMIT_DEFAULT) // ← THÊM
 {
-  rc = {0.0f, 1.0f, 1.0f, 0.0f};
+  rc = {0.0f, 0.0f, 0.0f, 0.0f};
 }
 
 // =============================================
@@ -43,7 +43,7 @@ void BTController::update() {
   if (!nowConnected && connected) {
     connected = false;
     activeKey = ActiveKey::NONE;
-    rc        = {0, 1, 1, 0};
+    rc        = {0, 0, 0, 0};
     Serial.println("[BT] Mất kết nối! Reset RC.");
   }
 
@@ -129,7 +129,7 @@ void BTController::handleChar(char c) {
     // --- EMERGENCY STOP ---
     case 'X':
       activeKey   = ActiveKey::NONE;
-      rc          = {0, 1, 1, 0};
+      rc          = {0.0f, 0.0f, 0.0f, 0.0f};
       fc.disarm();
       Serial.println("[BT] !!! EMERGENCY STOP !!!");
       bt.println("STOP:OK");
@@ -145,7 +145,7 @@ void BTController::handleChar(char c) {
     // --- DISARM ---
     case 'S':
       activeKey = ActiveKey::NONE;
-      rc        = {0, 1, 1, 0};
+      rc        = {0.0f, 0.0f, 0.0f, 0.0f};
       fc.disarm();
       bt.println("DISARM:OK");
       break;
@@ -246,7 +246,18 @@ void BTController::parsePIDCommand(const String& cmd) {
     bt.println("PID:UPDATED");
     sendPIDStatus();
 
-  } else {
+  }
+  else if (cmd.startsWith("trim:")) {
+    parseTrimCommand(cmd.substring(5));
+  }
+  else if (cmd == "trim") {
+    // Xem hướng dẫn
+    bt.println("TRIM:fl:+5.0  fr:0  bl:+3.0  br:0");
+    bt.println("TRIM:range -20.0 to +20.0");
+    bt.println("TRIM:reset = ve 0 het");
+    sendTrimStatus();
+  }
+   else {
     bt.println("ERR:UNKNOWN_CMD");
   }
 }
@@ -318,7 +329,20 @@ void BTController::parseConfigCommand(const String& cmd) {
     bt.println(buf);
     Serial.println(buf);
 
-  } else {
+  }
+  
+  else if (cmd.startsWith("trim:")) {
+    parseTrimCommand(cmd.substring(5));
+
+  } else if (cmd == "trim") {
+    // Xem hướng dẫn
+    bt.println("TRIM:fl:+5.0  fr:0  bl:+3.0  br:0");
+    bt.println("TRIM:range -20.0 to +20.0");
+    bt.println("TRIM:reset = ve 0 het");
+    sendTrimStatus();
+  }
+  
+  else {
     bt.println("ERR:CFG_KEY_UNKNOWN");
   }
 }
@@ -345,15 +369,17 @@ void BTController::sendTelemetry(const SensorData& s,
 // STATUS & PID
 // =============================================
 void BTController::sendStatus() {
-  char buf[120];
+  char buf[160];
   snprintf(buf, sizeof(buf),
-    "STATUS:armed=%d,thr=%.1f,roll=%.1f,pitch=%.1f,yaw=%.1f,tmax=%.1f,ilim=%.3f",
-    fc.isArmed(),
-    rc.throttle, rc.roll, rc.pitch, rc.yaw,
-    thrMax, integralLimit   // ← THÊM
+    "STATUS:armed=%d,thr=%.1f"
+    "|TRIM:fl=%.1f,fr=%.1f,bl=%.1f,br=%.1f",
+    fc.isArmed(), rc.throttle,
+    fc.getMotorTrim(0), fc.getMotorTrim(1),
+    fc.getMotorTrim(2), fc.getMotorTrim(3)
   );
   bt.println(buf);
 }
+
 
 void BTController::sendPIDStatus() {
   char buf[220];
@@ -377,4 +403,78 @@ void BTController::sendPIDStatus() {
 
 float BTController::clamp(float val, float mn, float mx) {
   return val < mn ? mn : (val > mx ? mx : val);
+}
+
+void BTController::parseTrimCommand(const String& cmd) {
+  Serial.printf("[BT TRIM] '%s'\n", cmd.c_str());
+
+  // Xem giá trị hiện tại
+  if (cmd == "?") {
+    sendTrimStatus();
+    return;
+  }
+
+  // Reset tất cả về 0
+  if (cmd == "reset") {
+    for (int i = 0; i < 4; i++)
+      fc.setMotorTrim(i, 0.0f);
+    bt.println("TRIM:reset OK");
+    sendTrimStatus();
+    return;
+  }
+
+  if (cmd == "save") {
+    fc.saveTrim();
+    bt.println("TRIM:saved to NVS");
+    return;
+  }
+
+  // Tách motor:value — ví dụ "fl:+5.0"
+  int sep = cmd.indexOf(':');
+  if (sep < 0) {
+    bt.println("ERR:TRIM_FORMAT(vi_du:trim:fl:+5.0)");
+    return;
+  }
+
+  String motorName = cmd.substring(0, sep);
+  float  val       = cmd.substring(sep + 1).toFloat();
+
+  // Map tên → index
+  int idx = -1;
+  if      (motorName == "fl") idx = 0;
+  else if (motorName == "fr") idx = 1;
+  else if (motorName == "bl") idx = 2;
+  else if (motorName == "br") idx = 3;
+  else {
+    bt.println("ERR:TRIM_MOTOR(fl/fr/bl/br)");
+    return;
+  }
+
+  // Validate range
+  if (val < TRIM_MIN || val > TRIM_MAX) {
+    char buf[50];
+    snprintf(buf, sizeof(buf),
+      "ERR:TRIM_RANGE(%.0f to %.0f)", TRIM_MIN, TRIM_MAX);
+    bt.println(buf);
+    return;
+  }
+
+  fc.setMotorTrim(idx, val);
+
+  char buf[50];
+  snprintf(buf, sizeof(buf),
+    "TRIM:%s=%.1f OK", motorName.c_str(), val);
+  bt.println(buf);
+  sendTrimStatus();
+}
+
+void BTController::sendTrimStatus() {
+  char buf[80];
+  snprintf(buf, sizeof(buf),
+    "TRIM:fl=%.1f,fr=%.1f,bl=%.1f,br=%.1f",
+    fc.getMotorTrim(0), fc.getMotorTrim(1),
+    fc.getMotorTrim(2), fc.getMotorTrim(3)
+  );
+  bt.println(buf);
+  Serial.println(buf);
 }

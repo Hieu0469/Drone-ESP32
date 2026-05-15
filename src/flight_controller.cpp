@@ -1,4 +1,5 @@
 #include "flight_controller.h"
+#include <Preferences.h>
 
 // =============================================
 // CONSTRUCTOR
@@ -19,6 +20,7 @@ void FlightController::begin() {
   pidRoll.reset();
   pidPitch.reset();
   pidYaw.reset();
+  loadTrim();
   armed = true;
   Serial.println("[FC] Flight Controller ready!");
 }
@@ -72,10 +74,16 @@ void FlightController::mixMotors(float throttle,
                                   float pitchOut,
                                   float yawOut) {
   float fl=0, fr=0, bl=0, br=0;
-  fl = throttle + rollOut - pitchOut + yawOut;  // thêm 5% để cân bằng quạt yếu hơn
-  fr = throttle - rollOut - pitchOut - yawOut ;
-  bl = throttle + rollOut + pitchOut - yawOut + 5;
-  br = throttle - rollOut + pitchOut + yawOut;
+  fl = throttle + rollOut - pitchOut + yawOut;  // 25
+  fr = throttle - rollOut - pitchOut - yawOut;   // 26
+  bl = throttle + rollOut + pitchOut - yawOut;   //27
+  br = throttle - rollOut + pitchOut + yawOut;   //14
+
+  // Áp dụng trim — cộng thêm offset cho motor yếu
+  // fl += motorTrim[0];
+  // fr += motorTrim[1];
+  // bl += motorTrim[2];
+  // br += motorTrim[3];
 
   // Clamp 0 ~ MAX_THROTTLE
   motorOut.fl = clamp(fl, 0.0f, maxThrottle);
@@ -143,4 +151,47 @@ void FlightController::printPIDStatus() {
 
 float FlightController::clamp(float val, float mn, float mx) {
   return val < mn ? mn : (val > mx ? mx : val);
+}
+
+void FlightController::setMotorTrim(int motorIdx, float trim) {
+  if (motorIdx < 0 || motorIdx >= 4) return;
+  motorTrim[motorIdx] = clamp(trim, TRIM_MIN, TRIM_MAX);
+  Serial.printf("[TRIM] Motor %d = %.1f%%\n",
+                motorIdx, motorTrim[motorIdx]);
+}
+
+float FlightController::getMotorTrim(int motorIdx) const {
+  if (motorIdx < 0 || motorIdx >= 4) return 0;
+  return motorTrim[motorIdx];
+}
+
+void FlightController::printTrimStatus() {
+  Serial.printf(
+    "[TRIM] FL:%.1f  FR:%.1f  BL:%.1f  BR:%.1f\n",
+    motorTrim[0], motorTrim[1],
+    motorTrim[2], motorTrim[3]
+  );
+}
+
+void FlightController::saveTrim() {
+  Preferences prefs;
+  prefs.begin("drone", false);
+  prefs.putFloat("trim_fl", motorTrim[0]);
+  prefs.putFloat("trim_fr", motorTrim[1]);
+  prefs.putFloat("trim_bl", motorTrim[2]);
+  prefs.putFloat("trim_br", motorTrim[3]);
+  prefs.end();
+  Serial.println("[TRIM] Saved to NVS");
+}
+
+void FlightController::loadTrim() {
+  Preferences prefs;
+  prefs.begin("drone", true);  // read-only
+  motorTrim[0] = prefs.getFloat("trim_fl", 0.0f);
+  motorTrim[1] = prefs.getFloat("trim_fr", 0.0f);
+  motorTrim[2] = prefs.getFloat("trim_bl", 0.0f);
+  motorTrim[3] = prefs.getFloat("trim_br", 0.0f);
+  prefs.end();
+  Serial.println("[TRIM] Loaded from NVS");
+  printTrimStatus();
 }
