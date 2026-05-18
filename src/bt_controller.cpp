@@ -120,9 +120,15 @@ void BTController::handleChar(char c) {
       activeKey = ActiveKey::NONE;
       // Roll, Pitch, Yaw về 0 khi thả
       // Throttle giữ nguyên
-      rc.roll  = 0.0f;
-      rc.pitch = 0.0f;
-      rc.yaw   = 0.0f;
+      if (rc.roll > 0) rc.roll = clamp(rc.roll - ANGLE_STEP, 0.0f, ANGLE_MAX);
+      else if (rc.roll < 0) rc.roll = clamp(rc.roll + ANGLE_STEP, -ANGLE_MAX, 0.0f);
+      
+      if(rc.pitch > 0) rc.pitch = clamp(rc.pitch - ANGLE_STEP, 0.0f, ANGLE_MAX);
+      else if (rc.pitch < 0) rc.pitch = clamp(rc.pitch + ANGLE_STEP, -ANGLE_MAX, 0.0f);
+      
+      if(rc.yaw > 0) rc.yaw = clamp(rc.yaw - YAW_STEP, 0.0f, YAW_MAX);
+      else if (rc.yaw < 0) rc.yaw = clamp(rc.yaw + YAW_STEP, -YAW_MAX, 0.0f);
+      
       Serial.printf("[BT] HOLD — Thr:%.1f%%\n", rc.throttle);
       break;
 

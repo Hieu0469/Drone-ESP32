@@ -16,7 +16,7 @@
 #define THR_MAX_DEFAULT       52.0f
 #define INTEGRAL_LIMIT_DEFAULT 5.0f
 
-#define ANGLE_MAX         30.0f
+#define ANGLE_MAX         10.0f
 #define YAW_MAX           18.0f
 
 #define JOYSTICK_UPDATE_MS  20   // xử lý ramping mỗi 20ms
