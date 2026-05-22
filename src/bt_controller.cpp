@@ -172,11 +172,17 @@ void BTController::handleChar(char c) {
 // APPLY RAMP — tăng/giảm dần mỗi 20ms
 // =============================================
 void BTController::applyRamp() {
+  if(rc.roll > 45.0f || rc.roll < -45.0f || rc.pitch > 45.0f || rc.pitch < -45.0f) {
+        activeKey = ActiveKey::NONE;
+        rc        = {0.0f, 0.0f, 0.0f, 0.0f};
+        fc.disarm();
+  }
   switch (activeKey) {
 
     case ActiveKey::THR_UP:
       rc.throttle = clamp(rc.throttle + THR_STEP,
                           THR_MIN, thrMax);
+
       break;
 
     case ActiveKey::THR_DOWN:
