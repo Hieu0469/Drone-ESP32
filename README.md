@@ -107,7 +107,8 @@ Used to compensate for physical imbalances in the drone frame or motors. Range: 
 
 ## 👁️ Computer Vision & Object Detection (YOLO Pipeline)
 
-To keep the drone lightweight and cost-effective while enabling advanced AI features, this project utilizes an off-board processing architecture. A smartphone mounted on the drone acts as the camera payload, while a ground-station PC handles the heavy computational lifting using a lightweight YOLO nano model.
+To keep the drone lightweight and cost-effective while enabling advanced AI features, this project utilizes an off-board processing architecture. A smartphone mounted on the drone acts as the camera payload, while a ground-station PC handles the heavy computational lifting using a lightweight YOLO nano model. The model is trained on VisDrone dataset with default Ultralystics training strategy.
+<img width="564" height="339" alt="Screenshot 2026-05-17 212513" src="https://github.com/user-attachments/assets/48cf0afd-045b-4bff-a306-7bf61e3655a9" />
 
 ### 🔄 System Flow Architecture
 
@@ -116,21 +117,4 @@ To keep the drone lightweight and cost-effective while enabling advanced AI feat
 3. **Extraction (OBS Studio):** The PC runs **OBS Studio** to capture the Zoom meeting window. OBS then outputs this clean feed using the **OBS Virtual Camera** feature.
 4. **AI Processing (YOLO):** A local Python script utilizes OpenCV to read the OBS Virtual Camera feed and processes the frames through the **YOLO** object detection model in real-time.
 
-### 🛠️ Setup Instructions
 
-#### 1. Drone & Transmission Setup
-* Mount the smartphone on the drone (ensure the center of gravity is balanced).
-* Open Zoom on the phone, join a meeting, and turn on the rear camera.
-* Join the same Zoom meeting on your ground-station PC and pin the phone's video feed to full screen.
-
-#### 2. OBS Studio Configuration
-* Open OBS Studio.
-* Add a new **Window Capture** source and select the Zoom meeting window.
-* Crop the capture area if necessary to remove Zoom UI elements.
-* Click **Start Virtual Camera** in the OBS controls panel.
-
-#### 3. Python Processing Setup
-Make sure you have the required libraries installed on your PC:
-```bash
-pip install ultralytics opencv-python
-```
