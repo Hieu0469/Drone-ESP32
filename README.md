@@ -104,3 +104,33 @@ Used to compensate for physical imbalances in the drone frame or motors. Range: 
 * **PROPELLERS ARE DANGEROUS.** Always test your PID tuning and motor directions with the propellers **REMOVED** from the drone.
 * Ensure your ESCs are properly calibrated to the 1000µs - 2000µs range before attaching a battery.
 * Keep your finger ready to send the `X` (Emergency Stop) command during initial test flights.
+
+## 👁️ Computer Vision & Object Detection (YOLO Pipeline)
+
+To keep the drone lightweight and cost-effective while enabling advanced AI features, this project utilizes an off-board processing architecture. A smartphone mounted on the drone acts as the camera payload, while a ground-station PC handles the heavy computational lifting using a lightweight YOLO nano model.
+
+### 🔄 System Flow Architecture
+
+1. **Video Capture:** A smartphone mounted securely on the drone frame captures real-time video.
+2. **Transmission (Zoom):** The phone joins a **Zoom** meeting and broadcasts its camera feed to the ground-station PC over Wi-Fi/4G.
+3. **Extraction (OBS Studio):** The PC runs **OBS Studio** to capture the Zoom meeting window. OBS then outputs this clean feed using the **OBS Virtual Camera** feature.
+4. **AI Processing (YOLO):** A local Python script utilizes OpenCV to read the OBS Virtual Camera feed and processes the frames through the **YOLO** object detection model in real-time.
+
+### 🛠️ Setup Instructions
+
+#### 1. Drone & Transmission Setup
+* Mount the smartphone on the drone (ensure the center of gravity is balanced).
+* Open Zoom on the phone, join a meeting, and turn on the rear camera.
+* Join the same Zoom meeting on your ground-station PC and pin the phone's video feed to full screen.
+
+#### 2. OBS Studio Configuration
+* Open OBS Studio.
+* Add a new **Window Capture** source and select the Zoom meeting window.
+* Crop the capture area if necessary to remove Zoom UI elements.
+* Click **Start Virtual Camera** in the OBS controls panel.
+
+#### 3. Python Processing Setup
+Make sure you have the required libraries installed on your PC:
+```bash
+pip install ultralytics opencv-python
+```
