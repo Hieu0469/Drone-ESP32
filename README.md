@@ -108,6 +108,7 @@ Used to compensate for physical imbalances in the drone frame or motors. Range: 
 ## 👁️ Computer Vision & Object Detection (YOLO Pipeline)
 
 To keep the drone lightweight and cost-effective while enabling advanced AI features, this project utilizes an off-board processing architecture. A smartphone mounted on the drone acts as the camera payload, while a ground-station PC handles the heavy computational lifting using a lightweight YOLO nano model. The model is trained on VisDrone dataset with default Ultralystics training strategy.
+
 <img width="564" height="339" alt="Screenshot 2026-05-17 212513" src="https://github.com/user-attachments/assets/48cf0afd-045b-4bff-a306-7bf61e3655a9" />
 
 ### 🔄 System Flow Architecture
